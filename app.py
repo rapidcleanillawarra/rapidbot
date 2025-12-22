@@ -474,14 +474,19 @@ class ChromeClickerApp:
             self.root.after(0, lambda: self.update_status("● Submitting...", self.warning_color))
             submit_success = self.run_submission_process()
             
+            print(f"Process 4 returned: {submit_success}")
+            
             if not submit_success:
                 self.root.after(0, lambda: self.update_status("● Submission Failed", self.highlight_color))
                 self.root.after(0, lambda: self.show_retry_button())
                 return
             
             # Process 5: Confirm Submission
+            print("Starting Process 5: Confirm Submission...")
             self.root.after(0, lambda: self.update_status("● Confirming...", self.warning_color))
             confirm_success = self.run_confirm_submission_process()
+            
+            print(f"Process 5 returned: {confirm_success}")
             
             if confirm_success:
                 self.root.after(0, lambda: self.update_status("● Success!", self.success_color))
@@ -655,8 +660,10 @@ class ChromeClickerApp:
     def update_product_status(self, new_status):
         """Update the status of the current product in current_page_data"""
         try:
+            page_data = self.current_state.get("current_page_data", [])
+            
             # Find and update the product with status "current"
-            for product in self.current_state["current_page_data"]:
+            for product in page_data:
                 if product.get("status") == "current":
                     product["status"] = new_status
                     break
@@ -664,12 +671,10 @@ class ChromeClickerApp:
             # Save updated state to file
             with open(self.current_json_path, 'w') as f:
                 json.dump(self.current_state, f, indent=2)
-            
-            print(f"Updated product status to: {new_status}")
-            
+                
         except Exception as e:
-            print(f"Error updating product status: {e}")
-            raise Exception(f"Failed to update product status: {str(e)}")
+            print(f"Error updating product status: {e}", flush=True)
+            raise
     
     # ========== PROCESS METHODS ==========
     
@@ -736,9 +741,13 @@ class ChromeClickerApp:
             import time
             import pyautogui
             
+            print("\n=== PROCESS 4: SUBMISSION ===")
+            
             # Step 1: Open browser and navigate to ChatGPT
             self.root.after(0, lambda: self.update_log("Opening browser and navigating to ChatGPT..."))
             result = find_and_click_chrome()
+            
+            print(f"Browser result: {result}")
             
             if not result:
                 self.root.after(0, lambda: self.update_log("✗ Could not launch browser."))
@@ -749,6 +758,10 @@ class ChromeClickerApp:
             # Step 2: Scan for input_field_ready.png as indicator that page is ready
             input_ready_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input_field_ready.png")
             input_field_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input_field.png")
+            
+            print(f"Checking images exist...")
+            print(f"  input_field_ready.png: {os.path.exists(input_ready_image)}")
+            print(f"  input_field.png: {os.path.exists(input_field_image)}")
             
             if not os.path.exists(input_ready_image):
                 self.root.after(0, lambda: self.update_log("✗ Missing: input_field_ready.png"))
@@ -761,35 +774,46 @@ class ChromeClickerApp:
             wait_seconds = 2
             page_ready = False
             
+            print("Starting page ready scan loop...")
+            
             for attempt in range(1, max_retries + 1):
+                print(f"  Attempt {attempt}/{max_retries}...")
                 self.root.after(0, lambda a=attempt: self.update_log(f"Checking if page is ready... (attempt {a}/{max_retries})"))
                 
                 try:
                     ready_indicator = pyautogui.locateOnScreen(input_ready_image, confidence=0.8)
+                    print(f"    Ready indicator result: {ready_indicator}")
                     
                     if ready_indicator:
                         self.root.after(0, lambda: self.update_log("✓ Page is ready!"))
                         page_ready = True
                         break
                 except Exception as scan_err:
+                    print(f"    Scan error: {scan_err}")
                     self.root.after(0, lambda: self.update_log(f"Scan attempt failed..."))
                 
                 if attempt < max_retries:
                     time.sleep(wait_seconds)
+            
+            print(f"Page ready: {page_ready}")
             
             if not page_ready:
                 self.root.after(0, lambda: self.update_log(f"✗ Page not ready after {max_retries} attempts."))
                 return False
             
             # Step 3: Now find and click on input_field.png
+            print("Looking for input_field.png to click...")
             self.root.after(0, lambda: self.update_log("Locating input field to click..."))
             input_location = pyautogui.locateOnScreen(input_field_image, confidence=0.8)
+            
+            print(f"Input location: {input_location}")
             
             if not input_location:
                 self.root.after(0, lambda: self.update_log("✗ Could not locate input field to click."))
                 return False
             
             center_x, center_y = pyautogui.center(input_location)
+            print(f"Clicking at: ({center_x}, {center_y})")
             self.root.after(0, lambda: self.update_log("Clicking input field..."))
             pyautogui.moveTo(center_x, center_y, duration=0.3)
             time.sleep(0.2)
@@ -797,18 +821,22 @@ class ChromeClickerApp:
             time.sleep(0.3)
             
             # Step 4: Paste clipboard content (Ctrl+V)
+            print("Pasting...")
             self.root.after(0, lambda: self.update_log("Pasting clipboard content..."))
             pyautogui.hotkey('ctrl', 'v')
             time.sleep(0.3)
             
             # Step 5: Press Enter to submit
+            print("Pressing Enter...")
             self.root.after(0, lambda: self.update_log("Submitting..."))
             pyautogui.press('enter')
             
+            print("=== PROCESS 4 COMPLETE ===\n")
             self.root.after(0, lambda: self.update_log("✓ Submitted successfully!"))
             return True
                 
         except Exception as e:
+            print(f"Process 4 exception: {e}")
             error_msg = str(e)
             self.root.after(0, lambda msg=error_msg: self.update_log(f"✗ Submission failed:\n{msg}"))
             return False
@@ -819,9 +847,16 @@ class ChromeClickerApp:
             import time
             import pyautogui
             
+            print("\n=== PROCESS 5: CONFIRM SUBMISSION ===")
+            
             # Image paths for submission indicators
             answer_now_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "submission_indicator_answer_now.png")
             stop_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "submission_indicator_stop.png")
+            
+            print(f"Answer Now image: {answer_now_image}")
+            print(f"  Exists: {os.path.exists(answer_now_image)}")
+            print(f"Stop image: {stop_image}")
+            print(f"  Exists: {os.path.exists(stop_image)}")
             
             # Check if images exist
             if not os.path.exists(answer_now_image):
@@ -834,62 +869,129 @@ class ChromeClickerApp:
             max_retries = 5
             wait_seconds = 5
             
+            print(f"Starting confirmation loop: {max_retries} attempts, {wait_seconds}s wait")
+            
             for attempt in range(1, max_retries + 1):
+                print(f"\n  Attempt {attempt}/{max_retries}...")
                 self.root.after(0, lambda a=attempt: self.update_log(f"Checking for response... (attempt {a}/{max_retries})"))
                 
                 try:
                     # Check for both indicator images
+                    print("    Scanning for Answer Now...")
                     answer_now_found = pyautogui.locateOnScreen(answer_now_image, confidence=0.8)
+                    print(f"    Answer Now result: {answer_now_found}")
+                    
+                    print("    Scanning for Stop...")
                     stop_found = pyautogui.locateOnScreen(stop_image, confidence=0.8)
+                    print(f"    Stop result: {stop_found}")
                     
                     if answer_now_found and stop_found:
+                        print("    ✓ BOTH FOUND!", flush=True)
                         self.root.after(0, lambda: self.update_log("✓ Submission confirmed! Both indicators found."))
                         
-                        # Update product status to "submitted"
-                        self.update_product_status("submitted")
+                        # Update product status to "submitted" - INLINE
+                        print("\n    === UPDATING PRODUCT STATUS ===", flush=True)
+                        print(f"    Brand: {self.selected_brand_name}", flush=True)
+                        print(f"    JSON Path: {self.current_json_path}", flush=True)
+                        
+                        page_data = self.current_state.get("current_page_data", [])
+                        print(f"    Products in state: {len(page_data)}", flush=True)
+                        
+                        current_index = -1
+                        for i, product in enumerate(page_data):
+                            if product.get("status") == "current":
+                                print(f"    Found product at [{i}]: {product.get('SKU')}", flush=True)
+                                product["status"] = "submitted"
+                                current_index = i
+                                print(f"    Status changed to: submitted", flush=True)
+                                break
+                        
+                        if current_index == -1:
+                            print("    WARNING: No product with status 'current' found!", flush=True)
+                        else:
+                            # Mark the next product as "current" if it exists
+                            next_index = current_index + 1
+                            if next_index < len(page_data):
+                                page_data[next_index]["status"] = "current"
+                                print(f"    Next product [{next_index}]: {page_data[next_index].get('SKU')} → status: current", flush=True)
+                            else:
+                                print(f"    No more products in this page (reached end of list)", flush=True)
+                        
+                        # Save to file
+                        print(f"    Saving to: {self.current_json_path}", flush=True)
+                        with open(self.current_json_path, 'w') as f:
+                            json.dump(self.current_state, f, indent=2)
+                        print("    ✓ File saved!", flush=True)
+                        print("    === UPDATE COMPLETE ===\n", flush=True)
+                        
                         self.root.after(0, lambda: self.update_log("✓ Product status updated to 'submitted'"))
                         
+                        print("=== PROCESS 5 COMPLETE ===\n", flush=True)
                         return True
                     elif answer_now_found:
+                        print("    Found Answer Now only")
                         self.root.after(0, lambda: self.update_log(f"Found 'Answer Now' indicator, waiting for 'Stop'..."))
                     elif stop_found:
+                        print("    Found Stop only")
                         self.root.after(0, lambda: self.update_log(f"Found 'Stop' indicator, waiting for 'Answer Now'..."))
                     else:
+                        print("    Neither found")
                         self.root.after(0, lambda: self.update_log(f"No indicators found yet..."))
                         
                 except Exception as scan_error:
+                    print(f"    Scan exception: {scan_error}")
                     error_msg = str(scan_error)
                     self.root.after(0, lambda msg=error_msg: self.update_log(f"Scan error: {msg}"))
                 
                 # Wait before next attempt (except on last attempt)
                 if attempt < max_retries:
+                    print(f"    Waiting {wait_seconds} seconds...")
                     time.sleep(wait_seconds)
             
+            print("✗ Process 5 failed - max retries reached")
+            print("=== PROCESS 5 FAILED ===\n")
             self.root.after(0, lambda: self.update_log(f"✗ Could not confirm submission after {max_retries} attempts."))
             return False
                 
         except Exception as e:
+            print(f"Process 5 exception: {e}")
             self.root.after(0, lambda: self.update_log(f"✗ Confirm failed:\n{str(e)}"))
             return False
     
     def run_clipboard_process(self):
         """Process 3: Clipboard - copy current product data to clipboard"""
         try:
+            print("\n=== PROCESS 3: CLIPBOARD ===", flush=True)
+            print(f"Selected Brand: {self.selected_brand_name}", flush=True)
+            print(f"JSON Path: {self.current_json_path}", flush=True)
+            
             # Step 1: Verify current_page_data exists
             if not self.current_state.get("current_page_data"):
+                print("ERROR: current_page_data is empty or not found!", flush=True)
                 self.root.after(0, lambda: self.update_log("✗ No product data available."))
                 return False
             
+            print(f"Products in current_page_data: {len(self.current_state['current_page_data'])}", flush=True)
+            
             # Step 2: Find the product with status "current"
             current_product = None
-            for product in self.current_state["current_page_data"]:
+            for i, product in enumerate(self.current_state["current_page_data"]):
+                status = product.get("status", "NO STATUS")
+                print(f"  [{i}] SKU: {product.get('SKU')}, Status: {status}", flush=True)
                 if product.get("status") == "current":
                     current_product = product
-                    break
             
             if not current_product:
+                print("ERROR: No product with status 'current' found!", flush=True)
                 self.root.after(0, lambda: self.update_log("✗ No product marked as 'current'."))
                 return False
+            
+            print(f"\n>>> CURRENT PRODUCT <<<", flush=True)
+            print(f"  InventoryID: {current_product.get('InventoryID')}", flush=True)
+            print(f"  Brand: {current_product.get('Brand')}", flush=True)
+            print(f"  Model: {current_product.get('Model')}", flush=True)
+            print(f"  SKU: {current_product.get('SKU')}", flush=True)
+            print(f"  Status: {current_product.get('status')}", flush=True)
             
             # Step 3: Prepare clipboard data
             clipboard_text = f"""InventoryID: {current_product.get('InventoryID', 'N/A')}
@@ -902,11 +1004,12 @@ SKU: {current_product.get('SKU', 'N/A')}"""
             self.root.clipboard_append(clipboard_text)
             self.root.update()  # Required to finalize clipboard operation
             
+            print(f"\nClipboard content:\n{clipboard_text}", flush=True)
+            print("=== PROCESS 3 COMPLETE ===\n", flush=True)
+            
             self.root.after(0, lambda: self.update_log(
                 f"✓ Copied to clipboard:\n{current_product.get('SKU', 'N/A')} - {current_product.get('Model', 'N/A')[:40]}"
             ))
-            
-            print(f"Copied to clipboard:\n{clipboard_text}")
             
             return True
             
