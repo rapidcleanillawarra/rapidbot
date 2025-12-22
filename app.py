@@ -5,6 +5,7 @@ import os
 import sys
 import requests
 import json
+import winsound
 
 # Import the click function from your existing script
 from click_chrome import find_and_click_chrome, find_and_click_image, CHROME_IMAGE
@@ -59,6 +60,10 @@ class ChromeClickerApp:
             "current_page": 0,
             "current_page_data": []
         }
+        
+        # Active tabs tracking
+        self.active_tabs_count = 2
+
 
         
         self.create_widgets()
@@ -246,6 +251,31 @@ class ChromeClickerApp:
         )
         self.image_status.pack(fill=tk.X, pady=(10, 0))
         
+        # Active Tabs field
+        tabs_container = tk.Frame(status_frame, bg=self.card_color)
+        tabs_container.pack(fill=tk.X, pady=(10, 0))
+        
+        tk.Label(
+            tabs_container,
+            text="Active Tabs:",
+            font=("Segoe UI", 9, "bold"),
+            fg="#888",
+            bg=self.card_color
+        ).pack(side=tk.LEFT)
+        
+        self.active_tabs_var = tk.StringVar(value="2")
+        self.active_tabs_entry = tk.Entry(
+            tabs_container,
+            textvariable=self.active_tabs_var,
+            font=("Segoe UI", 10),
+            width=5,
+            bg="#0f3460",
+            fg=self.text_color,
+            insertbackground=self.text_color,
+            relief=tk.FLAT
+        )
+        self.active_tabs_entry.pack(side=tk.LEFT, padx=(5, 0))
+        
         # Progress/Log area
         log_frame = tk.Frame(left_column, bg=self.accent_color, padx=10, pady=10)
         log_frame.pack(fill=tk.X, pady=(0, 20))
@@ -420,6 +450,14 @@ class ChromeClickerApp:
         self.status_indicator.config(text=status, fg=color)
         self.root.update()
     
+    def update_active_tabs(self, count):
+        """Update the active tabs counter"""
+        self.active_tabs_count = count
+        self.active_tabs_var.set(str(count))
+        self.root.update()
+
+
+    
     def start_clicking(self):
         """Start the clicking process in a separate thread"""
         if self.is_running:
@@ -481,6 +519,7 @@ class ChromeClickerApp:
                 self.root.after(0, lambda: self.show_retry_button())
                 return
             
+            
             # Process 5: Confirm Submission
             print("Starting Process 5: Confirm Submission...")
             self.root.after(0, lambda: self.update_status("● Confirming...", self.warning_color))
@@ -488,12 +527,26 @@ class ChromeClickerApp:
             
             print(f"Process 5 returned: {confirm_success}")
             
-            if confirm_success:
-                self.root.after(0, lambda: self.update_status("● Success!", self.success_color))
-                self.root.after(0, lambda: self.show_retry_button())
-            else:
+            if not confirm_success:
                 self.root.after(0, lambda: self.update_status("● Confirm Failed", self.warning_color))
                 self.root.after(0, lambda: self.show_retry_button())
+                return
+            
+            # Process 6: Check Tabs
+            print("Starting Process 6: Check Tabs...")
+            self.root.after(0, lambda: self.update_status("● Checking Tabs...", self.warning_color))
+            tabs_success = self.run_check_tabs_process()
+            
+            print(f"Process 6 returned: {tabs_success}")
+            
+            # Final status update
+            if tabs_success:
+                self.root.after(0, lambda: self.update_status("● Success!", self.success_color))
+            else:
+                self.root.after(0, lambda: self.update_status("● Tab Check Failed", self.warning_color))
+            
+            self.root.after(0, lambda: self.show_retry_button())
+
                 
         except Exception as e:
             self.root.after(0, lambda: self.update_status("● Error", self.highlight_color))
@@ -681,6 +734,9 @@ class ChromeClickerApp:
     def run_create_folders_process(self):
         """Process 1: Create folders and initialize current.json"""
         try:
+            # Beep sound for Process 1
+            winsound.Beep(800, 200)
+            
             # Step 1: Setup folder structure
             self.root.after(0, lambda: self.update_log(f"Creating folder for '{self.selected_brand_name}'..."))
             brand_folder = self.ensure_brand_folder()
@@ -702,6 +758,9 @@ class ChromeClickerApp:
     def run_update_current_data_process(self):
         """Process 2: Update current data - fetch products if needed"""
         try:
+            # Beep sound for Process 2
+            winsound.Beep(900, 200)
+            
             # Check if current_page_data is empty or needs refresh
             if not self.current_state.get("current_page_data"):
                 self.root.after(0, lambda: self.update_log(
@@ -741,6 +800,9 @@ class ChromeClickerApp:
             import time
             import pyautogui
             
+            # Beep sound for Process 4
+            winsound.Beep(1100, 200)
+            
             print("\n=== PROCESS 4: SUBMISSION ===")
             
             # Step 1: Open browser and navigate to ChatGPT
@@ -754,6 +816,8 @@ class ChromeClickerApp:
                 return False
             
             self.root.after(0, lambda: self.update_log("✓ Browser opened. Waiting for input field..."))
+
+
             
             # Step 2: Scan for input_field_ready.png as indicator that page is ready
             input_ready_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input_field_ready.png")
@@ -847,6 +911,9 @@ class ChromeClickerApp:
             import time
             import pyautogui
             
+            # Beep sound for Process 5
+            winsound.Beep(1200, 200)
+            
             print("\n=== PROCESS 5: CONFIRM SUBMISSION ===")
             
             # Image paths for submission indicators
@@ -866,7 +933,7 @@ class ChromeClickerApp:
                 self.root.after(0, lambda: self.update_log(f"✗ Missing: submission_indicator_stop.png"))
                 return False
             
-            max_retries = 5
+            max_retries = 10
             wait_seconds = 5
             
             print(f"Starting confirmation loop: {max_retries} attempts, {wait_seconds}s wait")
@@ -958,9 +1025,166 @@ class ChromeClickerApp:
             self.root.after(0, lambda: self.update_log(f"✗ Confirm failed:\n{str(e)}"))
             return False
     
+    def run_check_tabs_process(self):
+        """Process 6: Check Tabs - detect and count active browser tabs"""
+        try:
+            import time
+            import pyautogui
+            
+            # Beep sound for Process 6
+            winsound.Beep(1300, 200)
+            
+            print("\n=== PROCESS 6: CHECK TABS ===", flush=True)
+            
+            # Step 1: Get the active_tab.png image path
+            self.root.after(0, lambda: self.update_log("Loading active tab image..."))
+            active_tab_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "active_tab.png")
+            
+            print(f"Active tab image: {active_tab_image}", flush=True)
+            print(f"  Exists: {os.path.exists(active_tab_image)}", flush=True)
+            
+            # Check if image exists
+            if not os.path.exists(active_tab_image):
+                print("✗ Image file not found!", flush=True)
+                self.root.after(0, lambda: self.update_log(f"✗ Missing: active_tab.png"))
+                return False
+            
+            print("✓ Image file loaded successfully", flush=True)
+            self.root.after(0, lambda: self.update_log("Scanning screen for active tabs..."))
+            
+            # Step 2: Scan screen for all instances of active_tab.png
+            print("Starting screen scan...", flush=True)
+            print("  Confidence: 0.8", flush=True)
+            print("  Scanning entire screen area...", flush=True)
+            
+            try:
+                # Use locateAllOnScreen to find all matches
+                print("  Executing locateAllOnScreen...", flush=True)
+                all_matches = list(pyautogui.locateAllOnScreen(active_tab_image, confidence=0.8))
+                
+                # Filter out duplicates (matches that overlap significantly)
+                print(f"  Raw matches found: {len(all_matches)}", flush=True)
+                
+                def boxes_overlap(box1, box2, threshold=0.5):
+                    """Check if two boxes overlap by more than threshold (0.0 to 1.0)"""
+                    # Calculate intersection
+                    x_left = max(box1.left, box2.left)
+                    y_top = max(box1.top, box2.top)
+                    x_right = min(box1.left + box1.width, box2.left + box2.width)
+                    y_bottom = min(box1.top + box1.height, box2.top + box2.height)
+                    
+                    if x_right < x_left or y_bottom < y_top:
+                        return False  # No intersection
+                    
+                    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+                    box1_area = box1.width * box1.height
+                    box2_area = box2.width * box2.height
+                    smaller_area = min(box1_area, box2_area)
+                    
+                    overlap_ratio = intersection_area / smaller_area if smaller_area > 0 else 0
+                    return overlap_ratio > threshold
+                
+                unique_matches = []
+                for match in all_matches:
+                    is_duplicate = False
+                    for existing in unique_matches:
+                        # Check if this match overlaps significantly with an existing match
+                        if boxes_overlap(match, existing, threshold=0.5):
+                            is_duplicate = True
+                            break
+                    
+                    if not is_duplicate:
+                        unique_matches.append(match)
+                
+                print(f"  Unique matches after filtering: {len(unique_matches)}", flush=True)
+                
+                matches = unique_matches
+                tab_count = len(matches)
+
+                
+                print(f"\n✓ Scan complete!", flush=True)
+                print(f"  Found {tab_count} active tab(s) (after filtering duplicates)", flush=True)
+                
+                if tab_count > 0:
+                    print(f"  Match locations:", flush=True)
+                    for i, match in enumerate(matches, 1):
+                        print(f"    [{i}] {match}", flush=True)
+                else:
+                    print("  No tabs detected on screen", flush=True)
+                
+                # Step 3: Check if we need to close tabs
+                try:
+                    desired_tabs = int(self.active_tabs_var.get())
+                    print(f"\nDesired tabs (from GUI): {desired_tabs}", flush=True)
+                    print(f"Detected tabs: {tab_count}", flush=True)
+                    
+                    if tab_count > desired_tabs:
+                        tabs_to_close = tab_count - desired_tabs
+                        print(f"\n⚠ Too many tabs! Need to close {tabs_to_close} tab(s)", flush=True)
+                        self.root.after(0, lambda: self.update_log(f"Closing {tabs_to_close} excess tab(s)..."))
+                        
+                        # Sort matches by left position (leftmost first)
+                        sorted_matches = sorted(matches, key=lambda m: m.left)
+                        
+                        for i in range(tabs_to_close):
+                            leftmost_tab = sorted_matches[i]
+                            center_x = leftmost_tab.left + leftmost_tab.width // 2
+                            center_y = leftmost_tab.top + leftmost_tab.height // 2
+                            
+                            print(f"\n  Closing tab {i+1}/{tabs_to_close}:", flush=True)
+                            print(f"    Position: ({center_x}, {center_y})", flush=True)
+                            
+                            # Click on the tab
+                            pyautogui.click(center_x, center_y)
+                            time.sleep(0.3)
+                            
+                            # Press Ctrl+W to close it
+                            print(f"    Pressing Ctrl+W...", flush=True)
+                            pyautogui.hotkey('ctrl', 'w')
+                            time.sleep(0.5)
+                            
+                            print(f"    ✓ Tab closed", flush=True)
+                        
+                        print(f"\n✓ Closed {tabs_to_close} tab(s) successfully", flush=True)
+                        self.root.after(0, lambda count=tabs_to_close: self.update_log(f"✓ Closed {count} excess tab(s)"))
+                        
+                        # Update tab count after closing
+                        tab_count = desired_tabs
+                    else:
+                        print(f"\n✓ Tab count is within limit", flush=True)
+                        
+                except ValueError:
+                    print(f"\n⚠ Invalid Active Tabs value in GUI field", flush=True)
+                
+                # Step 4: Update the Active Tabs field
+                print(f"\nUpdating Active Tabs field to: {tab_count}", flush=True)
+                self.root.after(0, lambda: self.update_active_tabs(tab_count))
+                self.root.after(0, lambda count=tab_count: self.update_log(f"✓ Detected {count} active tab(s)"))
+
+                
+                print("=== PROCESS 6 COMPLETE ===\n", flush=True)
+                return True
+                
+            except Exception as scan_error:
+                print(f"\n✗ Scan error: {scan_error}", flush=True)
+                error_msg = str(scan_error)
+                self.root.after(0, lambda msg=error_msg: self.update_log(f"✗ Tab scan failed: {msg}"))
+                return False
+                
+        except Exception as e:
+            print(f"\n✗ Process 6 exception: {e}", flush=True)
+            error_msg = str(e)
+            self.root.after(0, lambda msg=error_msg: self.update_log(f"✗ Check tabs failed:\n{msg}"))
+            return False
+
+
+    
     def run_clipboard_process(self):
         """Process 3: Clipboard - copy current product data to clipboard"""
         try:
+            # Beep sound for Process 3
+            winsound.Beep(1000, 200)
+            
             print("\n=== PROCESS 3: CLIPBOARD ===", flush=True)
             print(f"Selected Brand: {self.selected_brand_name}", flush=True)
             print(f"JSON Path: {self.current_json_path}", flush=True)
