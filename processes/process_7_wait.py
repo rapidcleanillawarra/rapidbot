@@ -1,11 +1,11 @@
-# Process 7: Wait - cycle through tabs and detect JSON download text via OCR
+# Process 7: Wait and Download - cycle through tabs, detect JSON download link via image, and click to download
 import time
 import os
 import pyautogui
 import pytesseract
 from PIL import ImageGrab
 from .base import BaseProcess
-from config import ACTIVE_TAB_IMAGE, IMAGE_CONFIDENCE
+from config import ACTIVE_TAB_IMAGE, IMAGE_CONFIDENCE, DOWNLOAD_JSON_IMAGE, AUTOMATE_JSON_IMAGE
 from utils.image_scanner import filter_duplicate_boxes
 from utils.audio import beep_success, beep_error
 
@@ -24,16 +24,22 @@ for path in TESSERACT_PATHS:
 
 
 class WaitProcess(BaseProcess):
-    """Process 7: Wait - cycle through tabs and detect target text via OCR"""
+    """Process 7: Wait and Download - cycle through tabs, detect target via image matching, and click to download"""
     
     PROCESS_NUMBER = 7
-    PROCESS_NAME = "WAIT"
+    PROCESS_NAME = "WAIT AND DOWNLOAD"
     
-    # Target text patterns to search for
+    # Images to search for (in order of priority)
+    TARGET_IMAGES = [
+        ("download_json.png", DOWNLOAD_JSON_IMAGE),
+        ("automate_json.png", AUTOMATE_JSON_IMAGE),
+    ]
+    
+    # Target text patterns to search for (OCR fallback)
     TARGET_PATTERNS = ["Download the JSON", "_automate.json"]
     
     def run(self) -> bool:
-        """Cycle through tabs and detect target text via OCR."""
+        """Cycle through tabs and detect target image, click to download."""
         try:
             self.play_beep()
             self.log_start()
@@ -61,28 +67,28 @@ class WaitProcess(BaseProcess):
             tabs_to_check = min(len(tab_matches), allowed_tabs)
             print(f"Will check {tabs_to_check} tab(s)", flush=True)
             
-            # Step 3: Cycle through each tab and check for target text
+            # Step 3: Cycle through each tab and check for target image
             for i, tab in enumerate(tab_matches[:tabs_to_check], 1):
                 print(f"\n--- Checking tab {i}/{tabs_to_check} ---", flush=True)
                 self.update_log(f"Checking tab {i}/{tabs_to_check}...")
                 
-                if self._check_tab_for_text(tab, i):
-                    print(f"\n✓ Found target text in tab {i}!", flush=True)
-                    self.update_log(f"✓ Found target text in tab {i}!")
+                if self._check_tab_for_download(tab, i):
+                    print(f"\n✓ Found and clicked download in tab {i}!", flush=True)
+                    self.update_log(f"✓ Downloaded from tab {i}!")
                     beep_success()
                     self.log_complete()
                     return True
             
-            # No target text found in any tab
-            print("\n✗ Target text not found in any tab", flush=True)
-            self.update_log("✗ Target text not found")
+            # No target found in any tab
+            print("\n✗ Download target not found in any tab", flush=True)
+            self.update_log("✗ Download target not found")
             beep_error()
             self.log_failed()
             return False
             
         except Exception as e:
             print(f"Process 7 exception: {e}", flush=True)
-            self.update_log(f"✗ Wait process failed:\n{str(e)}")
+            self.update_log(f"✗ Wait and Download failed:\n{str(e)}")
             beep_error()
             self.log_failed()
             return False
@@ -110,8 +116,8 @@ class WaitProcess(BaseProcess):
             print(f"Tab scan error: {e}", flush=True)
             return []
     
-    def _check_tab_for_text(self, tab_box, tab_index: int) -> bool:
-        """Click on a tab and check for target text via OCR."""
+    def _check_tab_for_download(self, tab_box, tab_index: int) -> bool:
+        """Click on a tab, look for download image, and click to download if found."""
         # Click on tab to activate it
         center_x = tab_box.left + tab_box.width // 2
         center_y = tab_box.top + tab_box.height // 2
@@ -122,24 +128,36 @@ class WaitProcess(BaseProcess):
         # Wait for page to load
         time.sleep(1.5)
         
-        # Capture screen for OCR
-        print("  Capturing screen for OCR...", flush=True)
-        screenshot = ImageGrab.grab()
-        
-        # Run OCR on the screenshot
-        print("  Running OCR...", flush=True)
-        try:
-            text = pytesseract.image_to_string(screenshot)
+        # Try each target image in order
+        for image_name, image_path in self.TARGET_IMAGES:
+            print(f"  Scanning for {image_name}...", flush=True)
             
-            # Search for target patterns
-            for pattern in self.TARGET_PATTERNS:
-                if pattern.lower() in text.lower():
-                    print(f"  ✓ Found pattern: '{pattern}'", flush=True)
+            try:
+                if not os.path.exists(image_path):
+                    print(f"    Warning: {image_path} does not exist", flush=True)
+                    continue
+                
+                download_location = pyautogui.locateOnScreen(
+                    image_path, 
+                    confidence=IMAGE_CONFIDENCE
+                )
+                
+                if download_location:
+                    # Click center of the found image
+                    click_x = download_location.left + download_location.width // 2
+                    click_y = download_location.top + download_location.height // 2
+                    
+                    print(f"  ✓ Found {image_name} at ({click_x}, {click_y})", flush=True)
+                    self.update_log(f"Found {image_name}, clicking...")
+                    
+                    pyautogui.click(click_x, click_y)
+                    print(f"  ✓ Clicked to download!", flush=True)
+                    time.sleep(0.5)
                     return True
-            
-            print(f"  Target patterns not found in tab {tab_index}", flush=True)
-            return False
-            
-        except Exception as e:
-            print(f"  OCR error: {e}", flush=True)
-            return False
+                    
+            except Exception as e:
+                print(f"    Scan error for {image_name}: {e}", flush=True)
+        
+        print(f"  No download target found in tab {tab_index}", flush=True)
+        return False
+
