@@ -51,6 +51,16 @@ class ChromeClickerApp:
         self.current_page = 0
         self.products_per_page = 10
         
+        # Product folder management
+        self.products_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "products")
+        self.current_brand_folder = None
+        self.current_json_path = None
+        self.current_state = {
+            "current_page": 0,
+            "current_page_data": []
+        }
+
+        
         self.create_widgets()
         self.check_image_status()
         
@@ -415,10 +425,15 @@ class ChromeClickerApp:
         if self.is_running:
             return
         
+        # Validate brand selection
+        if not self.selected_brand_name:
+            messagebox.showwarning("No Brand Selected", "Please select a brand before starting!")
+            return
+        
         self.is_running = True
-        self.start_btn.config(state=tk.DISABLED, text="⏳ Launching...")
-        self.update_status("● Launching...", self.warning_color)
-        self.update_log("Opening browser and navigating to ChatGPT...")
+        self.start_btn.config(state=tk.DISABLED, text="⏳ Starting...")
+        self.update_status("● Starting...", self.warning_color)
+        self.update_log("Initializing process...")
         
         # Run in separate thread to keep UI responsive
         thread = threading.Thread(target=self.run_clicker)
@@ -426,18 +441,46 @@ class ChromeClickerApp:
         thread.start()
     
     def run_clicker(self):
-        """Run the clicker function"""
+        """Run the complete process flow"""
         try:
-            result = find_and_click_chrome()
+            # Process 1: Create Folders
+            self.root.after(0, lambda: self.update_status("● Creating Folders...", self.warning_color))
+            folders_success = self.run_create_folders_process()
             
-            if result:
+            if not folders_success:
+                self.root.after(0, lambda: self.update_status("● Folder Creation Failed", self.highlight_color))
+                self.root.after(0, lambda: self.show_retry_button())
+                return
+            
+            # Process 2: Update Current Data
+            self.root.after(0, lambda: self.update_status("● Updating Data...", self.warning_color))
+            data_success = self.run_update_current_data_process()
+            
+            if not data_success:
+                self.root.after(0, lambda: self.update_status("● Data Update Failed", self.highlight_color))
+                self.root.after(0, lambda: self.show_retry_button())
+                return
+            
+            # Process 3: Clipboard
+            self.root.after(0, lambda: self.update_status("● Copying to Clipboard...", self.warning_color))
+            clipboard_success = self.run_clipboard_process()
+            
+            if not clipboard_success:
+                self.root.after(0, lambda: self.update_status("● Clipboard Failed", self.highlight_color))
+                self.root.after(0, lambda: self.show_retry_button())
+                return
+            
+            # Process 4: Automation
+            self.root.after(0, lambda: self.update_status("● Automating...", self.warning_color))
+            auto_success = self.run_automation_process()
+            
+            if auto_success:
                 self.root.after(0, lambda: self.update_status("● Success!", self.success_color))
-                self.root.after(0, lambda: self.update_log("✓ Browser opened and navigated to ChatGPT!"))
                 self.root.after(0, lambda: self.show_retry_button())
             else:
-                self.root.after(0, lambda: self.update_status("● Failed", self.warning_color))
-                self.root.after(0, lambda: self.update_log("✗ Could not launch browser.\nPlease check your default browser settings."))
+                self.root.after(0, lambda: self.update_status("● Automation Failed", self.warning_color))
                 self.root.after(0, lambda: self.show_retry_button())
+                
         except Exception as e:
             self.root.after(0, lambda: self.update_status("● Error", self.highlight_color))
             self.root.after(0, lambda: self.update_log(f"Error: {str(e)}"))
@@ -504,6 +547,289 @@ class ChromeClickerApp:
         self.start_btn.pack_forget()
         self.retry_btn.pack(fill=tk.X, pady=(0, 5))
     
+    # ========== HELPER METHODS ==========
+    
+    def ensure_brand_folder(self):
+        """Create brand-specific folder if it doesn't exist"""
+        try:
+            # Create products folder if it doesn't exist
+            if not os.path.exists(self.products_folder):
+                os.makedirs(self.products_folder)
+                print(f"Created products folder: {self.products_folder}")
+            
+            # Create brand-specific folder
+            brand_folder = os.path.join(self.products_folder, self.selected_brand_name)
+            if not os.path.exists(brand_folder):
+                os.makedirs(brand_folder)
+                print(f"Created brand folder: {brand_folder}")
+            
+            self.current_brand_folder = brand_folder
+            return brand_folder
+            
+        except Exception as e:
+            print(f"Error creating folder: {e}")
+            raise Exception(f"Failed to create folder: {str(e)}")
+    
+    def initialize_current_json(self):
+        """Initialize or load current.json file"""
+        try:
+            if not self.current_brand_folder:
+                raise Exception("Brand folder not set")
+            
+            self.current_json_path = os.path.join(self.current_brand_folder, "current.json")
+            
+            # Check if file exists
+            if os.path.exists(self.current_json_path):
+                # Load existing file
+                state = self.load_current_json()
+                self.current_state = state
+                print(f"Loaded existing state: {state}")
+            else:
+                # Create new file with default values
+                default_state = {
+                    "current_page": 0,
+                    "current_page_data": []
+                }
+                
+                with open(self.current_json_path, 'w') as f:
+                    json.dump(default_state, f, indent=2)
+                
+                self.current_state = default_state
+                print(f"Created new current.json with default values")
+            
+            return self.current_state
+            
+        except Exception as e:
+            print(f"Error initializing JSON: {e}")
+            raise Exception(f"Failed to initialize current.json: {str(e)}")
+    
+    def load_current_json(self):
+        """Load and parse current.json file"""
+        try:
+            with open(self.current_json_path, 'r') as f:
+                data = json.load(f)
+            return data
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            # Backup corrupted file
+            backup_path = self.current_json_path + ".backup"
+            if os.path.exists(self.current_json_path):
+                os.rename(self.current_json_path, backup_path)
+                print(f"Backed up corrupted file to: {backup_path}")
+            # Return default state
+            return {
+                "current_page": 0,
+                "current_page_data": []
+            }
+        except Exception as e:
+            print(f"Error loading JSON: {e}")
+            raise
+    
+    def update_current_json(self, page=None, page_data=None):
+        """Update current.json with new values"""
+        try:
+            if page is not None:
+                self.current_state["current_page"] = page
+            if page_data is not None:
+                self.current_state["current_page_data"] = page_data
+            
+            # Write to file
+            with open(self.current_json_path, 'w') as f:
+                json.dump(self.current_state, f, indent=2)
+            
+            print(f"Updated current.json: page={self.current_state['current_page']}, products={len(self.current_state['current_page_data'])}")
+            
+        except Exception as e:
+            print(f"Error updating JSON: {e}")
+            raise Exception(f"Failed to update current.json: {str(e)}")
+    
+    # ========== PROCESS METHODS ==========
+    
+    def run_create_folders_process(self):
+        """Process 1: Create folders and initialize current.json"""
+        try:
+            # Step 1: Setup folder structure
+            self.root.after(0, lambda: self.update_log(f"Creating folder for '{self.selected_brand_name}'..."))
+            brand_folder = self.ensure_brand_folder()
+            
+            # Step 2: Initialize/load current.json
+            self.root.after(0, lambda: self.update_log("Loading current.json..."))
+            state = self.initialize_current_json()
+            
+            self.root.after(0, lambda: self.update_log(
+                f"✓ Folders ready!\nCurrent page: {state['current_page']}"
+            ))
+            
+            return True
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.update_log(f"✗ Folder creation failed:\n{str(e)}"))
+            return False
+    
+    def run_update_current_data_process(self):
+        """Process 2: Update current data - fetch products if needed"""
+        try:
+            # Check if current_page_data is empty or needs refresh
+            if not self.current_state.get("current_page_data"):
+                self.root.after(0, lambda: self.update_log(
+                    f"Fetching products for page {self.current_state['current_page']}..."
+                ))
+                
+                # Update the page variable to match current_page
+                self.current_page = self.current_state['current_page']
+                self.page_var.set(str(self.current_page))
+                
+                # Fetch products synchronously
+                fetch_success = self.fetch_products_sync()
+                
+                if not fetch_success:
+                    self.root.after(0, lambda: self.update_log(
+                        "✗ Failed to fetch products."
+                    ))
+                    return False
+                
+                self.root.after(0, lambda: self.update_log(
+                    f"✓ Fetched {len(self.products)} products for page {self.current_page}"
+                ))
+            else:
+                self.root.after(0, lambda: self.update_log(
+                    f"✓ Current data already loaded ({len(self.current_state['current_page_data'])} products)"
+                ))
+            
+            return True
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.update_log(f"✗ Data update failed:\n{str(e)}"))
+            return False
+    
+    def run_automation_process(self):
+        """Process 4: Automation - open browser, navigate to ChatGPT, click input"""
+        try:
+            # Step 1: Open browser and navigate to ChatGPT
+            self.root.after(0, lambda: self.update_log("Opening browser and navigating to ChatGPT..."))
+            result = find_and_click_chrome()
+            
+            if result:
+                self.root.after(0, lambda: self.update_log("✓ Browser opened and navigated to ChatGPT!"))
+                return True
+            else:
+                self.root.after(0, lambda: self.update_log("✗ Could not launch browser.\nPlease check your default browser settings."))
+                return False
+                
+        except Exception as e:
+            self.root.after(0, lambda: self.update_log(f"✗ Automation failed:\n{str(e)}"))
+            return False
+    
+    def run_clipboard_process(self):
+        """Process 3: Clipboard - copy current product data to clipboard"""
+        try:
+            # Step 1: Verify current_page_data exists
+            if not self.current_state.get("current_page_data"):
+                self.root.after(0, lambda: self.update_log("✗ No product data available."))
+                return False
+            
+            # Step 2: Find the product with status "current"
+            current_product = None
+            for product in self.current_state["current_page_data"]:
+                if product.get("status") == "current":
+                    current_product = product
+                    break
+            
+            if not current_product:
+                self.root.after(0, lambda: self.update_log("✗ No product marked as 'current'."))
+                return False
+            
+            # Step 3: Prepare clipboard data
+            clipboard_text = f"""InventoryID: {current_product.get('InventoryID', 'N/A')}
+Brand: {current_product.get('Brand', 'N/A')}
+Model: {current_product.get('Model', 'N/A')}
+SKU: {current_product.get('SKU', 'N/A')}"""
+            
+            # Step 4: Copy to clipboard
+            self.root.clipboard_clear()
+            self.root.clipboard_append(clipboard_text)
+            self.root.update()  # Required to finalize clipboard operation
+            
+            self.root.after(0, lambda: self.update_log(
+                f"✓ Copied to clipboard:\n{current_product.get('SKU', 'N/A')} - {current_product.get('Model', 'N/A')[:40]}"
+            ))
+            
+            print(f"Copied to clipboard:\n{clipboard_text}")
+            
+            return True
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.update_log(f"✗ Clipboard failed:\n{str(e)}"))
+            return False
+    
+    def fetch_products_sync(self):
+        """Fetch products synchronously (for use in automation process)"""
+        try:
+            payload = {
+                "Filter": {
+                    "Brand": [self.selected_brand_name],
+                    "IsActive": True,
+                    "Page": self.current_page,
+                    "Limit": self.products_per_page,
+                    "OutputSelector": [
+                        "SKU",
+                        "Model",
+                        "InventoryID",
+                        "Brand"
+                    ]
+                },
+                "action": "GetItem"
+            }
+            
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.post(
+                self.BRANDS_API_URL,
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get("Ack") == "Success" and "Item" in data:
+                    self.products = data["Item"]
+                    
+                    # Prepare page data with status field for first product
+                    page_data = []
+                    for i, product in enumerate(self.products):
+                        product_data = {
+                            "InventoryID": product.get("InventoryID", ""),
+                            "Brand": product.get("Brand", ""),
+                            "Model": product.get("Model", ""),
+                            "SKU": product.get("SKU", "")
+                        }
+                        
+                        # Add status "current" to the first product
+                        if i == 0:
+                            product_data["status"] = "current"
+                        
+                        page_data.append(product_data)
+                    
+                    # Update current.json with the fetched products
+                    self.update_current_json(page_data=page_data)
+                    
+                    # Update product list on main thread
+                    self.root.after(0, self.update_product_list)
+                    return True
+                else:
+                    return False
+            else:
+                return False
+                
+        except Exception as e:
+            print(f"Error fetching products: {e}")
+            return False
+    
+
     def fetch_brands_async(self):
         """Fetch brands in a separate thread"""
         self.refresh_btn.config(state=tk.DISABLED)

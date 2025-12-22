@@ -59,3 +59,6 @@ coverage.xml
 # Uncomment if you don't want to commit these images
 # chrome_icon.png
 # input_field.png
+
+# Product data (local brand folders and state)
+products/
