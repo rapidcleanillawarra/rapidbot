@@ -13,7 +13,8 @@ from processes import (
     ClipboardProcess,
     SubmissionProcess,
     ConfirmProcess,
-    TabsProcess
+    TabsProcess,
+    WaitProcess
 )
 
 
@@ -68,6 +69,7 @@ class ChromeClickerApp:
         self.process_4 = SubmissionProcess(self)
         self.process_5 = ConfirmProcess(self)
         self.process_6 = TabsProcess(self)
+        self.process_7 = WaitProcess(self)
     
     def create_widgets(self):
         """Create all GUI widgets."""
@@ -421,10 +423,17 @@ class ChromeClickerApp:
             
             # Process 6: Check Tabs
             self.update_status("● Checking Tabs...", self.warning_color)
-            if self.process_6.run():
+            if not self.process_6.run():
+                self.update_status("● Tab Check Failed", self.warning_color)
+                self.root.after(0, self.show_retry_button)
+                return
+            
+            # Process 7: Wait - cycle through tabs and detect text
+            self.update_status("● Waiting for JSON...", self.warning_color)
+            if self.process_7.run():
                 self.update_status("● Success!", self.success_color)
             else:
-                self.update_status("● Tab Check Failed", self.warning_color)
+                self.update_status("● JSON Not Found", self.warning_color)
             
             self.root.after(0, self.show_retry_button)
             

@@ -43,6 +43,7 @@ BEEP_FREQUENCIES = {
     3: 1000,
     4: 1100,
     5: 1200,
-    6: 1300
+    6: 1300,
+    7: 1400
 }
 BEEP_DURATION = 200  # milliseconds
