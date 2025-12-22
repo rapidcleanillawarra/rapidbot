@@ -159,7 +159,7 @@ def bring_chrome_to_front():
         return False
 
 def find_and_click_chrome():
-    """Open browser, navigate to ChatGPT, and click on 'Ask Anything' button"""
+    """Open browser and navigate to ChatGPT (no clicking - that's handled separately)"""
     
     print("Opening browser...")
     
@@ -180,19 +180,6 @@ def find_and_click_chrome():
         # Wait for page to load
         print("\nWaiting for page to load...")
         time.sleep(3)
-        
-        # Now try to find and click the input field
-        print("\n" + "="*40)
-        print("Searching for input field...")
-        print("="*40)
-        
-        click_result = find_and_click_image()
-        
-        if click_result:
-            print("\n✓ Successfully clicked input field!")
-        else:
-            print("\n✗ Could not find input field")
-            print("Tip: Make sure the ChatGPT page is fully loaded and visible")
         
         return True
             

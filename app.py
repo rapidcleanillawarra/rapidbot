@@ -470,15 +470,24 @@ class ChromeClickerApp:
                 self.root.after(0, lambda: self.show_retry_button())
                 return
             
-            # Process 4: Automation
-            self.root.after(0, lambda: self.update_status("● Automating...", self.warning_color))
-            auto_success = self.run_automation_process()
+            # Process 4: Submission
+            self.root.after(0, lambda: self.update_status("● Submitting...", self.warning_color))
+            submit_success = self.run_submission_process()
             
-            if auto_success:
+            if not submit_success:
+                self.root.after(0, lambda: self.update_status("● Submission Failed", self.highlight_color))
+                self.root.after(0, lambda: self.show_retry_button())
+                return
+            
+            # Process 5: Confirm Submission
+            self.root.after(0, lambda: self.update_status("● Confirming...", self.warning_color))
+            confirm_success = self.run_confirm_submission_process()
+            
+            if confirm_success:
                 self.root.after(0, lambda: self.update_status("● Success!", self.success_color))
                 self.root.after(0, lambda: self.show_retry_button())
             else:
-                self.root.after(0, lambda: self.update_status("● Automation Failed", self.warning_color))
+                self.root.after(0, lambda: self.update_status("● Confirm Failed", self.warning_color))
                 self.root.after(0, lambda: self.show_retry_button())
                 
         except Exception as e:
@@ -643,6 +652,25 @@ class ChromeClickerApp:
             print(f"Error updating JSON: {e}")
             raise Exception(f"Failed to update current.json: {str(e)}")
     
+    def update_product_status(self, new_status):
+        """Update the status of the current product in current_page_data"""
+        try:
+            # Find and update the product with status "current"
+            for product in self.current_state["current_page_data"]:
+                if product.get("status") == "current":
+                    product["status"] = new_status
+                    break
+            
+            # Save updated state to file
+            with open(self.current_json_path, 'w') as f:
+                json.dump(self.current_state, f, indent=2)
+            
+            print(f"Updated product status to: {new_status}")
+            
+        except Exception as e:
+            print(f"Error updating product status: {e}")
+            raise Exception(f"Failed to update product status: {str(e)}")
+    
     # ========== PROCESS METHODS ==========
     
     def run_create_folders_process(self):
@@ -702,22 +730,146 @@ class ChromeClickerApp:
             self.root.after(0, lambda: self.update_log(f"✗ Data update failed:\n{str(e)}"))
             return False
     
-    def run_automation_process(self):
-        """Process 4: Automation - open browser, navigate to ChatGPT, click input"""
+    def run_submission_process(self):
+        """Process 4: Submission - open browser, navigate to ChatGPT, paste and submit"""
         try:
+            import time
+            import pyautogui
+            
             # Step 1: Open browser and navigate to ChatGPT
             self.root.after(0, lambda: self.update_log("Opening browser and navigating to ChatGPT..."))
             result = find_and_click_chrome()
             
-            if result:
-                self.root.after(0, lambda: self.update_log("✓ Browser opened and navigated to ChatGPT!"))
-                return True
-            else:
-                self.root.after(0, lambda: self.update_log("✗ Could not launch browser.\nPlease check your default browser settings."))
+            if not result:
+                self.root.after(0, lambda: self.update_log("✗ Could not launch browser."))
                 return False
+            
+            self.root.after(0, lambda: self.update_log("✓ Browser opened. Waiting for input field..."))
+            
+            # Step 2: Scan for input_field_ready.png as indicator that page is ready
+            input_ready_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input_field_ready.png")
+            input_field_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input_field.png")
+            
+            if not os.path.exists(input_ready_image):
+                self.root.after(0, lambda: self.update_log("✗ Missing: input_field_ready.png"))
+                return False
+            if not os.path.exists(input_field_image):
+                self.root.after(0, lambda: self.update_log("✗ Missing: input_field.png"))
+                return False
+            
+            max_retries = 5
+            wait_seconds = 2
+            page_ready = False
+            
+            for attempt in range(1, max_retries + 1):
+                self.root.after(0, lambda a=attempt: self.update_log(f"Checking if page is ready... (attempt {a}/{max_retries})"))
+                
+                try:
+                    ready_indicator = pyautogui.locateOnScreen(input_ready_image, confidence=0.8)
+                    
+                    if ready_indicator:
+                        self.root.after(0, lambda: self.update_log("✓ Page is ready!"))
+                        page_ready = True
+                        break
+                except Exception as scan_err:
+                    self.root.after(0, lambda: self.update_log(f"Scan attempt failed..."))
+                
+                if attempt < max_retries:
+                    time.sleep(wait_seconds)
+            
+            if not page_ready:
+                self.root.after(0, lambda: self.update_log(f"✗ Page not ready after {max_retries} attempts."))
+                return False
+            
+            # Step 3: Now find and click on input_field.png
+            self.root.after(0, lambda: self.update_log("Locating input field to click..."))
+            input_location = pyautogui.locateOnScreen(input_field_image, confidence=0.8)
+            
+            if not input_location:
+                self.root.after(0, lambda: self.update_log("✗ Could not locate input field to click."))
+                return False
+            
+            center_x, center_y = pyautogui.center(input_location)
+            self.root.after(0, lambda: self.update_log("Clicking input field..."))
+            pyautogui.moveTo(center_x, center_y, duration=0.3)
+            time.sleep(0.2)
+            pyautogui.click()
+            time.sleep(0.3)
+            
+            # Step 4: Paste clipboard content (Ctrl+V)
+            self.root.after(0, lambda: self.update_log("Pasting clipboard content..."))
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.3)
+            
+            # Step 5: Press Enter to submit
+            self.root.after(0, lambda: self.update_log("Submitting..."))
+            pyautogui.press('enter')
+            
+            self.root.after(0, lambda: self.update_log("✓ Submitted successfully!"))
+            return True
                 
         except Exception as e:
-            self.root.after(0, lambda: self.update_log(f"✗ Automation failed:\n{str(e)}"))
+            error_msg = str(e)
+            self.root.after(0, lambda msg=error_msg: self.update_log(f"✗ Submission failed:\n{msg}"))
+            return False
+    
+    def run_confirm_submission_process(self):
+        """Process 5: Confirm Submission - scan for indicator images"""
+        try:
+            import time
+            import pyautogui
+            
+            # Image paths for submission indicators
+            answer_now_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "submission_indicator_answer_now.png")
+            stop_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), "submission_indicator_stop.png")
+            
+            # Check if images exist
+            if not os.path.exists(answer_now_image):
+                self.root.after(0, lambda: self.update_log(f"✗ Missing: submission_indicator_answer_now.png"))
+                return False
+            if not os.path.exists(stop_image):
+                self.root.after(0, lambda: self.update_log(f"✗ Missing: submission_indicator_stop.png"))
+                return False
+            
+            max_retries = 5
+            wait_seconds = 5
+            
+            for attempt in range(1, max_retries + 1):
+                self.root.after(0, lambda a=attempt: self.update_log(f"Checking for response... (attempt {a}/{max_retries})"))
+                
+                try:
+                    # Check for both indicator images
+                    answer_now_found = pyautogui.locateOnScreen(answer_now_image, confidence=0.8)
+                    stop_found = pyautogui.locateOnScreen(stop_image, confidence=0.8)
+                    
+                    if answer_now_found and stop_found:
+                        self.root.after(0, lambda: self.update_log("✓ Submission confirmed! Both indicators found."))
+                        
+                        # Update product status to "submitted"
+                        self.update_product_status("submitted")
+                        self.root.after(0, lambda: self.update_log("✓ Product status updated to 'submitted'"))
+                        
+                        return True
+                    elif answer_now_found:
+                        self.root.after(0, lambda: self.update_log(f"Found 'Answer Now' indicator, waiting for 'Stop'..."))
+                    elif stop_found:
+                        self.root.after(0, lambda: self.update_log(f"Found 'Stop' indicator, waiting for 'Answer Now'..."))
+                    else:
+                        self.root.after(0, lambda: self.update_log(f"No indicators found yet..."))
+                        
+                except Exception as scan_error:
+                    error_msg = str(scan_error)
+                    self.root.after(0, lambda msg=error_msg: self.update_log(f"Scan error: {msg}"))
+                
+                # Wait before next attempt (except on last attempt)
+                if attempt < max_retries:
+                    time.sleep(wait_seconds)
+            
+            self.root.after(0, lambda: self.update_log(f"✗ Could not confirm submission after {max_retries} attempts."))
+            return False
+                
+        except Exception as e:
+            self.root.after(0, lambda: self.update_log(f"✗ Confirm failed:\n{str(e)}"))
             return False
     
     def run_clipboard_process(self):
