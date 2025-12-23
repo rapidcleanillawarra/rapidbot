@@ -4,17 +4,18 @@ import os
 # Directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRODUCTS_FOLDER = os.path.join(BASE_DIR, "products")
+IMAGES_DIR = os.path.join(BASE_DIR, "images")
 
 # Image paths
-CHROME_IMAGE = os.path.join(BASE_DIR, "chrome_icon.png")
-INPUT_FIELD_IMAGE = os.path.join(BASE_DIR, "input_field.png")
-INPUT_FIELD_READY_IMAGE = os.path.join(BASE_DIR, "input_field_ready.png")
-ACTIVE_TAB_IMAGE = os.path.join(BASE_DIR, "active_tab.png")
-SUBMISSION_ANSWER_NOW_IMAGE = os.path.join(BASE_DIR, "submission_indicator_answer_now.png")
-SUBMISSION_STOP_IMAGE = os.path.join(BASE_DIR, "submission_indicator_stop.png")
-DOWNLOAD_JSON_IMAGE = os.path.join(BASE_DIR, "download_json.png")
-AUTOMATE_JSON_IMAGE = os.path.join(BASE_DIR, "automate_json.png")
-ERROR_DOWNLOAD_IMAGE = os.path.join(BASE_DIR, "error_download.png")
+CHROME_IMAGE = os.path.join(IMAGES_DIR, "chrome_icon.png")
+INPUT_FIELD_IMAGE = os.path.join(IMAGES_DIR, "input_field.png")
+INPUT_FIELD_READY_IMAGE = os.path.join(IMAGES_DIR, "input_field_ready.png")
+ACTIVE_TAB_IMAGE = os.path.join(IMAGES_DIR, "active_tab.png")
+SUBMISSION_ANSWER_NOW_IMAGE = os.path.join(IMAGES_DIR, "submission_indicator_answer_now.png")
+SUBMISSION_STOP_IMAGE = os.path.join(IMAGES_DIR, "submission_indicator_stop.png")
+DOWNLOAD_JSON_IMAGE = os.path.join(IMAGES_DIR, "download_json.png")
+AUTOMATE_JSON_IMAGE = os.path.join(IMAGES_DIR, "automate_json.png")
+ERROR_DOWNLOAD_IMAGE = os.path.join(IMAGES_DIR, "error_download.png")
 
 # API Configuration
 BRANDS_API_URL = "https://default61576f99244849ec8803974b47673f.57.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/ef89e5969a8f45778307f167f435253c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=pPhk80gODQOi843ixLjZtPPWqTeXIbIt9ifWZP6CJfY"
