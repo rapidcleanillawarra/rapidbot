@@ -2,25 +2,10 @@
 import time
 import os
 import pyautogui
-import pytesseract
-from PIL import ImageGrab
 from .base import BaseProcess
-from config import ACTIVE_TAB_IMAGE, IMAGE_CONFIDENCE, DOWNLOAD_JSON_IMAGE, AUTOMATE_JSON_IMAGE
+from config import ACTIVE_TAB_IMAGE, IMAGE_CONFIDENCE, DOWNLOAD_JSON_IMAGE, AUTOMATE_JSON_IMAGE, ERROR_DOWNLOAD_IMAGE
 from utils.image_scanner import filter_duplicate_boxes
 from utils.audio import beep_success, beep_error
-
-# Configure Tesseract path for Windows
-TESSERACT_PATHS = [
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-    r"C:\Users\{}\AppData\Local\Programs\Tesseract-OCR\tesseract.exe".format(os.getenv("USERNAME", "")),
-]
-
-for path in TESSERACT_PATHS:
-    if os.path.exists(path):
-        pytesseract.pytesseract.tesseract_cmd = path
-        print(f"Tesseract found at: {path}", flush=True)
-        break
 
 
 class WaitProcess(BaseProcess):
@@ -34,9 +19,6 @@ class WaitProcess(BaseProcess):
         ("download_json.png", DOWNLOAD_JSON_IMAGE),
         ("automate_json.png", AUTOMATE_JSON_IMAGE),
     ]
-    
-    # Target text patterns to search for (OCR fallback)
-    TARGET_PATTERNS = ["Download the JSON", "_automate.json"]
     
     def run(self) -> bool:
         """Cycle through tabs and detect target image, click to download."""
@@ -117,7 +99,7 @@ class WaitProcess(BaseProcess):
             return []
     
     def _check_tab_for_download(self, tab_box, tab_index: int) -> bool:
-        """Click on a tab, look for download image, and click to download if found."""
+        """Click on a tab, check for failure first, then look for download image."""
         # Click on tab to activate it
         center_x = tab_box.left + tab_box.width // 2
         center_y = tab_box.top + tab_box.height // 2
@@ -128,7 +110,14 @@ class WaitProcess(BaseProcess):
         # Wait for page to load
         time.sleep(1.5)
         
-        # Try each target image in order
+        # FIRST: Check for failure condition using image matching
+        print("  Checking for error_download.png...", flush=True)
+        if self._check_for_failure():
+            print("  ✗ Failed file generation detected!", flush=True)
+            self.update_log("✗ Failed generation detected")
+            return False  # Skip this tab, it's a failure
+        
+        # SECOND: Try each target image in order (success check)
         for image_name, image_path in self.TARGET_IMAGES:
             print(f"  Scanning for {image_name}...", flush=True)
             
@@ -160,4 +149,31 @@ class WaitProcess(BaseProcess):
         
         print(f"  No download target found in tab {tab_index}", flush=True)
         return False
+    
+    def _check_for_failure(self) -> bool:
+        """Check screen for failure image (error_download.png).
+        
+        Returns:
+            True if failure image detected, False otherwise
+        """
+        try:
+            if not os.path.exists(ERROR_DOWNLOAD_IMAGE):
+                print(f"    Warning: {ERROR_DOWNLOAD_IMAGE} does not exist", flush=True)
+                return False
+            
+            error_location = pyautogui.locateOnScreen(
+                ERROR_DOWNLOAD_IMAGE,
+                confidence=IMAGE_CONFIDENCE
+            )
+            
+            if error_location:
+                print(f"    Found error_download.png on screen", flush=True)
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"    Failure check error: {e}", flush=True)
+            return False  # If check fails, assume no failure and continue
+
 
